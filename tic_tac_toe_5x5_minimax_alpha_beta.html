@@ -1,0 +1,1533 @@
+<!DOCTYPE html>
+<html lang="vi" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic-Tac-Toe 5x5 - Thuật toán Minimax & Cắt tỉa Alpha-Beta</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        body {
+            background: radial-gradient(circle at top left, #0f172a 0%, #020617 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Custom Board Grid & Cell Animations */
+        .board-cell {
+            position: relative;
+            aspect-ratio: 1 / 1;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            user-select: none;
+        }
+
+        .board-cell:not(.occupied):not(.game-over):hover {
+            transform: translateY(-2px) scale(1.02);
+            background-color: rgba(30, 41, 59, 0.9);
+            border-color: rgba(56, 189, 248, 0.5);
+            box-shadow: 0 8px 20px -4px rgba(14, 165, 233, 0.2);
+        }
+
+        .board-cell:not(.occupied):not(.game-over):active {
+            transform: scale(0.97);
+        }
+
+        /* Pop-in animation for X and O marks */
+        @keyframes popIn {
+            0% {
+                transform: scale(0.3) rotate(-12deg);
+                opacity: 0;
+            }
+            70% {
+                transform: scale(1.12) rotate(3deg);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1) rotate(0deg);
+                opacity: 1;
+            }
+        }
+
+        .piece-anim {
+            animation: popIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        /* Winning cell pulse */
+        @keyframes winPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.6), inset 0 0 18px rgba(16, 185, 129, 0.35);
+                border-color: #10b981;
+            }
+            50% {
+                box-shadow: 0 0 0 6px rgba(16, 185, 129, 0), inset 0 0 28px rgba(16, 185, 129, 0.55);
+                border-color: #34d399;
+            }
+        }
+
+        .cell-winner {
+            animation: winPulse 1.6s infinite;
+            background: rgba(6, 78, 59, 0.45) !important;
+            z-index: 10;
+        }
+
+        /* Last move ring highlight */
+        .cell-last-move {
+            border-color: #f59e0b !important;
+            box-shadow: inset 0 0 14px rgba(245, 158, 11, 0.25);
+        }
+
+        /* Hint move pulse */
+        @keyframes hintPulse {
+            0%, 100% {
+                border-color: #a855f7;
+                box-shadow: 0 0 12px rgba(168, 85, 247, 0.45);
+            }
+            50% {
+                border-color: #d8b4fe;
+                box-shadow: 0 0 20px rgba(168, 85, 247, 0.75);
+            }
+        }
+
+        .cell-hint {
+            animation: hintPulse 1.3s infinite;
+            background: rgba(88, 28, 135, 0.35) !important;
+        }
+
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+            border-radius: 6px;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 6px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-sky-500 selection:text-white">
+
+    <!-- Top Navigation / Header -->
+    <header class="border-b border-slate-800/80 bg-slate-900/70 backdrop-blur-md sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+                    <i class="fa-solid fa-chess-board text-white text-lg"></i>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="text-lg sm:text-xl font-bold tracking-tight text-white">
+                            Tic-Tac-Toe 5×5 AI
+                        </h1>
+                        <span class="px-2 py-0.5 text-[11px] font-mono font-semibold uppercase tracking-wider bg-sky-500/15 text-sky-400 border border-sky-500/30 rounded-full">
+                            Minimax + α-β Pruning
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 hidden sm:block">
+                        Mô phỏng trực quan cắt tỉa Alpha-Beta, sắp xếp nước đi (Move Ordering) và hàm lượng giá Heuristic
+                    </p>
+                </div>
+            </div>
+
+            <!-- Scoreboard Pill -->
+            <div class="flex items-center gap-2 sm:gap-3 bg-slate-950/90 border border-slate-800 px-3 py-1.5 rounded-xl">
+                <div class="flex items-center gap-2 px-2 py-0.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-sky-400 shadow-sm shadow-sky-400"></span>
+                    <span class="text-xs text-slate-300 font-medium">Bạn (X):</span>
+                    <span id="scorePlayer" class="font-mono font-bold text-sm text-sky-400">0</span>
+                </div>
+                <div class="h-4 w-px bg-slate-800"></div>
+                <div class="flex items-center gap-1.5 px-2 py-0.5">
+                    <span class="text-xs text-slate-400 font-medium">Hòa:</span>
+                    <span id="scoreDraw" class="font-mono font-bold text-sm text-slate-300">0</span>
+                </div>
+                <div class="h-4 w-px bg-slate-800"></div>
+                <div class="flex items-center gap-2 px-2 py-0.5">
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-400 shadow-sm shadow-rose-400"></span>
+                    <span class="text-xs text-slate-300 font-medium">Máy AI (O):</span>
+                    <span id="scoreAI" class="font-mono font-bold text-sm text-rose-400">0</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+
+            <!-- LEFT COLUMN: 5x5 Board & Game Controls (7 cols on desktop) -->
+            <div class="lg:col-span-7 flex flex-col gap-5">
+
+                <!-- Status Banner & Quick Toolbar -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 shadow-xl">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <!-- Current Status Display -->
+                        <div class="flex items-center gap-3">
+                            <div id="turnBadgeIcon" class="w-11 h-11 rounded-xl bg-sky-500/15 border border-sky-500/40 flex items-center justify-center text-sky-400 font-bold text-xl shrink-0 transition-colors">
+                                X
+                            </div>
+                            <div>
+                                <div class="text-xs uppercase tracking-wider text-slate-400 font-semibold">Trạng thái ván đấu</div>
+                                <div id="statusMessage" class="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                                    Đến lượt bạn đánh (X)
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Action Buttons -->
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button id="btnHint" onclick="requestHint()" class="px-3 py-2 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 border border-purple-500/30 text-xs font-semibold flex items-center gap-1.5 transition" title="Gợi ý nước đi tốt nhất từ thuật toán Minimax">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                <span>Gợi ý</span>
+                            </button>
+                            <button id="btnUndo" onclick="undoMove()" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-40 disabled:pointer-events-none">
+                                <i class="fa-solid fa-rotate-left"></i>
+                                <span>Đi lại</span>
+                            </button>
+                            <button onclick="resetGame()" class="px-3.5 py-2 rounded-xl bg-gradient-to-r from-sky-500 to-indigo-600 hover:from-sky-400 hover:to-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 shadow-lg shadow-sky-500/20 transition">
+                                <i class="fa-solid fa-rotate"></i>
+                                <span>Ván mới</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 5x5 Interactive Board Card -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 sm:p-6 shadow-2xl flex flex-col items-center relative">
+
+                    <!-- Coordinate Header (A B C D E) -->
+                    <div class="w-full max-w-[440px] grid grid-cols-5 gap-2 sm:gap-2.5 pl-6 mb-1.5 text-center">
+                        <span class="text-xs font-mono font-semibold text-slate-500">Cột 0 (A)</span>
+                        <span class="text-xs font-mono font-semibold text-slate-500">Cột 1 (B)</span>
+                        <span class="text-xs font-mono font-semibold text-slate-500">Cột 2 (C)</span>
+                        <span class="text-xs font-mono font-semibold text-slate-500">Cột 3 (D)</span>
+                        <span class="text-xs font-mono font-semibold text-slate-500">Cột 4 (E)</span>
+                    </div>
+
+                    <div class="w-full max-w-[440px] flex items-center">
+                        <!-- Row Coordinates (0 - 4) -->
+                        <div class="flex flex-col justify-around pr-2.5 self-stretch text-right">
+                            <span class="text-xs font-mono font-semibold text-slate-500">0</span>
+                            <span class="text-xs font-mono font-semibold text-slate-500">1</span>
+                            <span class="text-xs font-mono font-semibold text-slate-500">2</span>
+                            <span class="text-xs font-mono font-semibold text-slate-500">3</span>
+                            <span class="text-xs font-mono font-semibold text-slate-500">4</span>
+                        </div>
+
+                        <!-- 5x5 Grid Wrapper with SVG Overlay for Winning Line -->
+                        <div class="relative flex-1">
+                            <div id="boardGrid" class="grid grid-cols-5 gap-2 sm:gap-2.5 w-full">
+                                <!-- 25 cells dynamically generated by JS -->
+                            </div>
+
+                            <!-- Winning Laser Line SVG Overlay -->
+                            <svg id="winLineSvg" class="pointer-events-none absolute inset-0 w-full h-full z-20 hidden" viewBox="0 0 500 500">
+                                <defs>
+                                    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                                        <feGaussianBlur stdDeviation="8" result="blur" />
+                                        <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                                    </filter>
+                                </defs>
+                                <line id="winLineElement" x1="0" y1="0" x2="0" y2="0" stroke="#10b981" stroke-width="14" stroke-linecap="round" filter="url(#glow)" />
+                            </svg>
+                        </div>
+                    </div>
+
+                    <!-- Board Legend & Heatmap Toggle -->
+                    <div class="w-full max-w-[440px] mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-400">
+                        <div class="flex items-center gap-3">
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-sm border border-amber-500 bg-amber-500/20"></span>
+                                Nước vừa đánh
+                            </span>
+                            <span class="inline-flex items-center gap-1.5">
+                                <span class="w-2.5 h-2.5 rounded-sm border border-emerald-500 bg-emerald-500/20"></span>
+                                Đường thắng
+                            </span>
+                        </div>
+
+                        <label class="inline-flex items-center gap-2 cursor-pointer select-none">
+                            <input type="checkbox" id="toggleHeatmap" onchange="renderHeatmapOverlay()" checked class="sr-only peer">
+                            <div class="w-8 h-4 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all relative peer-checked:bg-sky-500"></div>
+                            <span class="text-slate-300 font-medium">Hiện điểm AI trên từng ô</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Configuration / Settings Panel -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-sky-400"></i>
+                            Cấu hình Trò chơi & Thuật toán AI
+                        </h2>
+                        <span class="text-[11px] text-slate-400">Thay đổi áp dụng ngay lập tức</span>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <!-- Win Condition Selector -->
+                        <div class="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl">
+                            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                <i class="fa-solid fa-trophy text-amber-400 mr-1"></i>
+                                Điều kiện thắng (Luật chơi)
+                            </label>
+                            <select id="selectWinLength" onchange="onSettingsChange(true)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white font-medium focus:outline-none focus:border-sky-500">
+                                <option value="4" selected>4 ô liên tiếp (Khuyên dùng cho bàn 5×5)</option>
+                                <option value="5">5 ô liên tiếp (Cổ điển 5×5)</option>
+                            </select>
+                            <p class="text-[11px] text-slate-400 mt-1.5">
+                                Luật 4 ô liên tiếp tạo ra nhiều đòn tấn công mở 2 đầu thú vị hơn trên bàn 5×5.
+                            </p>
+                        </div>
+
+                        <!-- Search Depth Selector -->
+                        <div class="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl">
+                            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                <i class="fa-solid fa-sitemap text-sky-400 mr-1"></i>
+                                Độ sâu duyệt cây Minimax (Depth)
+                            </label>
+                            <select id="selectDepth" onchange="onSettingsChange(false)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white font-medium focus:outline-none focus:border-sky-500">
+                                <option value="2">Độ sâu 2 (Dễ - Phản hồi tức thì)</option>
+                                <option value="3">Độ sâu 3 (Trung bình)</option>
+                                <option value="4" selected>Độ sâu 4 (Khó - Khuyên dùng)</option>
+                                <option value="5">Độ sâu 5 (Rất khó - Chuyên gia)</option>
+                            </select>
+                            <p class="text-[11px] text-slate-400 mt-1.5">
+                                Độ sâu càng lớn, AI nhìn trước càng nhiều nước đi tương lai.
+                            </p>
+                        </div>
+
+                        <!-- First Player Selector -->
+                        <div class="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl">
+                            <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                <i class="fa-solid fa-Play text-emerald-400 mr-1"></i>
+                                Lượt đi đầu tiên
+                            </label>
+                            <select id="selectFirstPlayer" onchange="onSettingsChange(true)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white font-medium focus:outline-none focus:border-sky-500">
+                                <option value="HUMAN" selected>Người chơi (X) đi trước</option>
+                                <option value="AI">Máy AI (O) đi trước</option>
+                            </select>
+                        </div>
+
+                        <!-- Alpha-Beta Pruning Comparison Toggle -->
+                        <div class="bg-slate-950/60 border border-slate-800/80 p-3.5 rounded-xl flex flex-col justify-between">
+                            <div>
+                                <label class="block text-xs font-semibold text-slate-300 mb-1.5">
+                                    <i class="fa-solid fa-scissors text-rose-400 mr-1"></i>
+                                    Chế độ Cắt tỉa Alpha-Beta
+                                </label>
+                                <select id="selectPruningMode" onchange="onSettingsChange(false)" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs sm:text-sm text-white font-medium focus:outline-none focus:border-sky-500">
+                                    <option value="ON" selected>Bật Cắt tỉa Alpha-Beta + Move Ordering (Tối ưu)</option>
+                                    <option value="OFF">Tắt Alpha-Beta (Minimax thuần để đối chiếu)</option>
+                                </select>
+                            </div>
+                            <p class="text-[11px] text-slate-400 mt-1.5">
+                                Thử tắt Alpha-Beta để thấy số nút phải duyệt tăng vọt gấp hàng chục lần!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Real-Time AI Telemetry & Code Inspector (5 cols on desktop) -->
+            <div class="lg:col-span-5 flex flex-col gap-5">
+
+                <!-- Real-Time AI Telemetry Card -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 shadow-xl">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-2">
+                            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping"></span>
+                            <h2 class="text-sm font-bold uppercase tracking-wider text-white">
+                                Thông số AI (Real-Time Telemetry)
+                            </h2>
+                        </div>
+                        <span id="telemetryTurnTag" class="text-[11px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                            Chờ nước đi...
+                        </span>
+                    </div>
+
+                    <!-- 4 Key Metric Cards -->
+                    <div class="grid grid-cols-2 gap-3 mb-4">
+                        <!-- Metric 1: Nodes Evaluated -->
+                        <div class="bg-slate-950/80 border border-slate-800/90 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                                <span>Số nút đã duyệt</span>
+                                <i class="fa-solid fa-diagram-project text-sky-400"></i>
+                            </div>
+                            <div id="metricNodes" class="font-mono text-xl sm:text-2xl font-bold text-white">0</div>
+                            <div id="metricDepthInfo" class="text-[11px] text-slate-400 mt-0.5 font-mono">Độ sâu: 4</div>
+                        </div>
+
+                        <!-- Metric 2: Alpha-Beta Prunings -->
+                        <div class="bg-slate-950/80 border border-slate-800/90 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                                <span>Nhánh cắt tỉa (α-β)</span>
+                                <i class="fa-solid fa-scissors text-emerald-400"></i>
+                            </div>
+                            <div id="metricPruned" class="font-mono text-xl sm:text-2xl font-bold text-emerald-400">0</div>
+                            <div id="metricPruneRate" class="text-[11px] text-emerald-400/80 mt-0.5 font-mono">Tối ưu: --%</div>
+                        </div>
+
+                        <!-- Metric 3: Computation Time -->
+                        <div class="bg-slate-950/80 border border-slate-800/90 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                                <span>Thời gian tính toán</span>
+                                <i class="fa-solid fa-bolt text-amber-400"></i>
+                            </div>
+                            <div id="metricTime" class="font-mono text-xl sm:text-2xl font-bold text-amber-400">0.0 ms</div>
+                            <div id="metricSpeed" class="text-[11px] text-slate-400 mt-0.5 font-mono">Tốc độ: -- nút/ms</div>
+                        </div>
+
+                        <!-- Metric 4: Best Move & Heuristic Score -->
+                        <div class="bg-slate-950/80 border border-slate-800/90 rounded-xl p-3.5">
+                            <div class="flex items-center justify-between text-xs text-slate-400 mb-1">
+                                <span>Điểm Lượng Giá</span>
+                                <i class="fa-solid fa-scale-balanced text-purple-400"></i>
+                            </div>
+                            <div id="metricScore" class="font-mono text-xl sm:text-2xl font-bold text-purple-400">0</div>
+                            <div id="metricBestMove" class="text-[11px] text-slate-300 mt-0.5 font-mono">Nước tối ưu: --</div>
+                        </div>
+                    </div>
+
+                    <!-- Board Advantage Evaluation Bar -->
+                    <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-3">
+                        <div class="flex justify-between text-xs font-medium mb-1.5">
+                            <span class="text-sky-400 flex items-center gap-1">
+                                <i class="fa-solid fa-user"></i> Lợi thế Người chơi (X)
+                            </span>
+                            <span id="evalBarLabel" class="font-mono text-slate-300 text-xs">Cân bằng (0)</span>
+                            <span class="text-rose-400 flex items-center gap-1">
+                                Lợi thế AI (O) <i class="fa-solid fa-robot"></i>
+                            </span>
+                        </div>
+                        <div class="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden flex">
+                            <div id="evalBarPlayer" class="bg-sky-500 h-full transition-all duration-300" style="width: 50%"></div>
+                            <div id="evalBarAI" class="bg-rose-500 h-full transition-all duration-300" style="width: 50%"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detailed Inspector Tabs: Candidate Moves / Move History / Source Code -->
+                <div class="bg-slate-900/90 border border-slate-800 rounded-2xl shadow-xl overflow-hidden flex flex-col">
+                    <!-- Tab Navigation -->
+                    <div class="flex border-b border-slate-800 bg-slate-950/60">
+                        <button onclick="switchTab('candidates')" id="tabBtn-candidates" class="flex-1 py-3 px-3 text-xs font-bold border-b-2 border-sky-500 text-sky-400 bg-slate-900/60 transition">
+                            <i class="fa-solid fa-chart-bar mr-1"></i> Đánh giá Nước đi
+                        </button>
+                        <button onclick="switchTab('history')" id="tabBtn-history" class="flex-1 py-3 px-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+                            <i class="fa-solid fa-clock-rotate-left mr-1"></i> Lịch sử (<span id="moveCountBadge">0</span>)
+                        </button>
+                        <button onclick="switchTab('code')" id="tabBtn-code" class="flex-1 py-3 px-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition">
+                            <i class="fa-solid fa-code mr-1"></i> Mã nguồn α-β
+                        </button>
+                    </div>
+
+                    <!-- Tab 1: Candidate Moves Evaluation -->
+                    <div id="tabPanel-candidates" class="p-4 max-h-[360px] overflow-y-auto">
+                        <div class="flex items-center justify-between mb-2.5">
+                            <span class="text-xs text-slate-400">
+                                Điểm lượng giá Minimax tại gốc cho từng ô trống:
+                            </span>
+                            <span class="text-[11px] font-mono text-slate-500">Cao nhất = Tối ưu cho AI</span>
+                        </div>
+                        <div id="candidateMovesList" class="space-y-2">
+                            <div class="text-xs text-slate-500 text-center py-8">
+                                Hãy đánh một nước trên bàn cờ 5×5 để xem AI phân tích và xếp hạng toàn bộ các phương án!
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 2: Move History Log -->
+                    <div id="tabPanel-history" class="p-4 max-h-[360px] overflow-y-auto hidden">
+                        <div id="moveHistoryList" class="space-y-1.5 font-mono text-xs">
+                            <div class="text-xs text-slate-500 text-center py-8 font-sans">
+                                Chưa có nước đi nào được thực hiện.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab 3: Algorithm Explanation & Clean Code -->
+                    <div id="tabPanel-code" class="p-4 max-h-[360px] overflow-y-auto hidden space-y-3">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-300">
+                                Thuật toán Minimax + Alpha-Beta + Heuristic 5×5
+                            </span>
+                            <button onclick="copyAlgorithmCode()" id="btnCopyCode" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-sky-400 border border-slate-700 text-xs font-mono flex items-center gap-1.5 transition">
+                                <i class="fa-regular fa-copy"></i>
+                                <span>Sao chép Code</span>
+                            </button>
+                        </div>
+
+                        <pre id="codeBlockDisplay" class="text-[11px] font-mono bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-300 overflow-x-auto leading-relaxed"><code>// Hàm Minimax kết hợp Cắt tỉa Alpha-Beta cho bàn cờ 5x5
+function minimaxAlphaBeta(board, depth, alpha, beta, isMaximizing) {
+    nodesEvaluated++;
+    const terminalScore = checkTerminalOrHeuristic(board, depth);
+    if (terminalScore !== null) return terminalScore;
+
+    // Sắp xếp nước đi (Move Ordering) ưu tiên ô trung tâm & kề cận
+    const moves = getOrderedMoves(board);
+
+    if (isMaximizing) { // Lượt của AI (O) - Tối đa hóa điểm
+        let maxEval = -Infinity;
+        for (const move of moves) {
+            board[move] = AI_PLAYER;
+            const evaluation = minimaxAlphaBeta(board, depth - 1, alpha, beta, false);
+            board[move] = EMPTY;
+
+            if (evaluation > maxEval) maxEval = evaluation;
+            if (evaluation > alpha) alpha = evaluation;
+
+            // Cắt tỉa nhánh Beta (Beta Cutoff)
+            if (beta <= alpha) {
+                prunedBranches++;
+                break;
+            }
+        }
+        return maxEval;
+    } else { // Lượt của Người chơi (X) - Tối thiểu hóa điểm của AI
+        let minEval = Infinity;
+        for (const move of moves) {
+            board[move] = HUMAN_PLAYER;
+            const evaluation = minimaxAlphaBeta(board, depth - 1, alpha, beta, true);
+            board[move] = EMPTY;
+
+            if (evaluation < minEval) minEval = evaluation;
+            if (evaluation < beta) beta = evaluation;
+
+            // Cắt tỉa nhánh Alpha (Alpha Cutoff)
+            if (beta <= alpha) {
+                prunedBranches++;
+                break;
+            }
+        }
+        return minEval;
+    }
+}</code></pre>
+                        <div class="bg-sky-500/10 border border-sky-500/20 rounded-xl p-3 text-xs text-slate-300 space-y-1">
+                            <div class="font-bold text-sky-400">Tại sao bàn cờ 5×5 cần Cắt tỉa Alpha-Beta & Move Ordering?</div>
+                            <p class="leading-relaxed text-slate-300/90">
+                                Bàn cờ 5×5 có <strong>25 ô</strong> ($25! \approx 1.55 \times 10^{25}$ trạng thái). Nếu dùng Minimax thuần sẽ bị bùng nổ tổ hợp. Nhờ <strong>Cắt tỉa Alpha-Beta</strong> kết hợp <strong>Sắp xếp thứ tự ưu tiên nước đi (Move Ordering)</strong> và <strong>Hàm lượng giá chuỗi mở/nửa mở</strong>, AI có thể loại bỏ tới <strong>85% – 96%</strong> số nhánh thừa mà vẫn tìm ra nước đi tối ưu trong vài mili-giây!
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Application JavaScript -->
+    <script>
+        /***********************************************************************
+         * 1. HẰNG SỐ VÀ TRẠNG THÁI TRÒ CHƠI (CONSTANTS & GAME STATE)
+         ***********************************************************************/
+        const BOARD_SIZE = 5;
+        const TOTAL_CELLS = BOARD_SIZE * BOARD_SIZE; // 25 ô (0..24)
+        const EMPTY = 0;
+        const HUMAN = 1; // Người chơi: X
+        const AI = 2;    // Máy AI: O
+
+        const COL_NAMES = ['A', 'B', 'C', 'D', 'E'];
+
+        // Trọng số vị trí tĩnh trên bàn cờ 5x5 (Ưu tiên trung tâm và các đường chéo chính)
+        const POSITIONAL_WEIGHTS = [
+            3, 4,  5,  4, 3,
+            4, 7,  8,  7, 4,
+            5, 8, 12,  8, 5,
+            4, 7,  8,  7, 4,
+            3, 4,  5,  4, 3
+        ];
+
+        // Trạng thái ván đấu hiện tại
+        let board = new Int8Array(TOTAL_CELLS);
+        let currentPlayer = HUMAN;
+        let gameOver = false;
+        let winLength = 4;        // Mặc định 4 ô liên tiếp thắng trên bàn 5x5
+        let searchDepth = 4;      // Độ sâu tìm kiếm mặc định
+        let useAlphaBeta = true;  // Bật cắt tỉa Alpha-Beta
+
+        // Lưu trữ các đường thẳng (ngang, dọc, chéo) dùng cho kiểm tra thắng & hàm Heuristic
+        let winSegments = [];     // Các đoạn có độ dài = winLength (28 đoạn nếu K=4, 12 đoạn nếu K=5)
+        let fullLines = [];       // Toàn bộ các đường ngang, dọc, chéo có độ dài >= winLength để xét chặn 2 đầu
+
+        // Lịch sử nước đi & Điểm số
+        let moveHistory = [];     // [{ index, player, stats }]
+        let lastMoveIndex = -1;
+        let hintMoveIndex = -1;
+        let winningCells = [];
+        let lastCandidateScores = new Map(); // Lưu điểm đánh giá từng ô từ lần tìm kiếm gần nhất
+
+        let scores = {
+            player: 0,
+            draw: 0,
+            ai: 0
+        };
+
+        // Biến đếm thống kê thuật toán cho mỗi lượt AI
+        let nodesEvaluated = 0;
+        let prunedBranches = 0;
+
+        /***********************************************************************
+         * 2. TIỀN XỬ LÝ ĐƯỜNG THẮNG & ĐƯỜNG LƯỢNG GIÁ (PRECOMPUTED LINES)
+         ***********************************************************************/
+        function precomputeBoardLines(k) {
+            winSegments = [];
+            fullLines = [];
+
+            const idx = (r, c) => r * BOARD_SIZE + c;
+
+            // 1. Sinh tất cả các đoạn có độ dài đúng bằng k (để kiểm tra thắng nhanh O(1))
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                for (let c = 0; c < BOARD_SIZE; c++) {
+                    // Ngang (Horizontal)
+                    if (c + k <= BOARD_SIZE) {
+                        const seg = [];
+                        for (let i = 0; i < k; i++) seg.push(idx(r, c + i));
+                        winSegments.push(seg);
+                    }
+                    // Dọc (Vertical)
+                    if (r + k <= BOARD_SIZE) {
+                        const seg = [];
+                        for (let i = 0; i < k; i++) seg.push(idx(r + i, c));
+                        winSegments.push(seg);
+                    }
+                    // Chéo chính \ (Main Diagonal)
+                    if (r + k <= BOARD_SIZE && c + k <= BOARD_SIZE) {
+                        const seg = [];
+                        for (let i = 0; i < k; i++) seg.push(idx(r + i, c + i));
+                        winSegments.push(seg);
+                    }
+                    // Chéo phụ / (Anti Diagonal)
+                    if (r + k <= BOARD_SIZE && c - k + 1 >= 0) {
+                        const seg = [];
+                        for (let i = 0; i < k; i++) seg.push(idx(r + i, c - i));
+                        winSegments.push(seg);
+                    }
+                }
+            }
+
+            // 2. Sinh toàn bộ các đường đầy đủ (5 ngang, 5 dọc, các đường chéo >= k) để đánh giá chuỗi mở 2 đầu
+            // 5 hàng ngang
+            for (let r = 0; r < BOARD_SIZE; r++) {
+                const line = [];
+                for (let c = 0; c < BOARD_SIZE; c++) line.push(idx(r, c));
+                fullLines.push(line);
+            }
+            // 5 cột dọc
+            for (let c = 0; c < BOARD_SIZE; c++) {
+                const line = [];
+                for (let r = 0; r < BOARD_SIZE; r++) line.push(idx(r, c));
+                fullLines.push(line);
+            }
+            // Đường chéo chính & các đường chéo song song có độ dài >= k
+            for (let startR = 0; startR <= BOARD_SIZE - k; startR++) {
+                const line = [];
+                for (let i = 0; startR + i < BOARD_SIZE; i++) line.push(idx(startR + i, i));
+                fullLines.push(line);
+            }
+            for (let startC = 1; startC <= BOARD_SIZE - k; startC++) {
+                const line = [];
+                for (let i = 0; startC + i < BOARD_SIZE; i++) line.push(idx(i, startC + i));
+                fullLines.push(line);
+            }
+            // Đường chéo phụ & các đường chéo song song có độ dài >= k
+            for (let startC = k - 1; startC < BOARD_SIZE; startC++) {
+                const line = [];
+                for (let i = 0; startC - i >= 0; i++) line.push(idx(i, startC - i));
+                fullLines.push(line);
+            }
+            for (let startR = 1; startR <= BOARD_SIZE - k; startR++) {
+                const line = [];
+                for (let i = 0; startR + i < BOARD_SIZE; i++) line.push(idx(startR + i, BOARD_SIZE - 1 - i));
+                fullLines.push(line);
+            }
+        }
+
+        /***********************************************************************
+         * 3. KIỂM TRA THẮNG / KẾT THÚC VÁN ĐẤU (TERMINAL STATE CHECK)
+         ***********************************************************************/
+        function checkWinnerState(b) {
+            for (let i = 0; i < winSegments.length; i++) {
+                const seg = winSegments[i];
+                const first = b[seg[0]];
+                if (first === EMPTY) continue;
+
+                let won = true;
+                for (let j = 1; j < seg.length; j++) {
+                    if (b[seg[j]] !== first) {
+                        won = false;
+                        break;
+                    }
+                }
+                if (won) {
+                    return { winner: first, line: seg };
+                }
+            }
+
+            // Kiểm tra còn ô trống không
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                if (b[i] === EMPTY) return null; // Chưa kết thúc
+            }
+
+            return { winner: 0, line: [] }; // Hòa (Draw)
+        }
+
+        /***********************************************************************
+         * 4. HÀM LƯỢNG GIÁ HEURISTIC (BOARD EVALUATION FUNCTION)
+         * Đánh giá trạng thái bàn cờ 5x5 dựa trên:
+         * - Số cửa sổ (windows) có khả năng tạo thành k ô liên tiếp
+         * - Các chuỗi liên tiếp mở 2 đầu (Open threats) và mở 1 đầu (Half-open)
+         * - Kiểm soát vị trí trung tâm bàn cờ
+         ***********************************************************************/
+        const WIN_SCORE = 1000000;
+
+        function evaluateBoard(b, depthRemaining = 0) {
+            // 1. Kiểm tra nếu đã có người chiến thắng
+            const winCheck = checkWinnerState(b);
+            if (winCheck !== null) {
+                if (winCheck.winner === AI) return WIN_SCORE + depthRemaining * 1000;
+                if (winCheck.winner === HUMAN) return -WIN_SCORE - depthRemaining * 1000;
+                return 0; // Hòa
+            }
+
+            let totalScore = 0;
+
+            // 2. Lượng giá trên tất cả các đoạn (windows) độ dài K = winLength
+            for (let i = 0; i < winSegments.length; i++) {
+                const seg = winSegments[i];
+                let aiCount = 0;
+                let humanCount = 0;
+
+                for (let j = 0; j < seg.length; j++) {
+                    const cell = b[seg[j]];
+                    if (cell === AI) aiCount++;
+                    else if (cell === HUMAN) humanCount++;
+                }
+
+                // Nếu đoạn có cả X và O thì đoạn này đã bị khóa (không ai thắng được trên đoạn này)
+                if (aiCount > 0 && humanCount > 0) continue;
+
+                if (aiCount > 0) {
+                    totalScore += getSegmentWeight(aiCount, winLength, true);
+                } else if (humanCount > 0) {
+                    totalScore -= getSegmentWeight(humanCount, winLength, false);
+                }
+            }
+
+            // 3. Lượng giá chuỗi liên tiếp mở 2 đầu (Open-ended streaks) trên các đường dài 5 ô
+            // Đặc biệt quan trọng với luật 4 ô liên tiếp: chuỗi 3 ô mở 2 đầu (_ X X X _) là chắc chắn thắng!
+            if (winLength === 4) {
+                for (let i = 0; i < fullLines.length; i++) {
+                    const line = fullLines[i];
+                    if (line.length < 5) continue;
+
+                    // Kiểm tra mẫu _ O O O _ hoặc _ X X X _ trên đường 5 ô: vị trí [1, 2, 3] cùng màu và [0], [4] trống
+                    const c0 = b[line[0]], c1 = b[line[1]], c2 = b[line[2]], c3 = b[line[3]], c4 = b[line[4]];
+                    if (c1 !== EMPTY && c1 === c2 && c2 === c3) {
+                        if (c0 === EMPTY && c4 === EMPTY) {
+                            // Chuỗi 3 mở cả 2 đầu -> Không thể đỡ!
+                            if (c1 === AI) totalScore += 65000;
+                            else totalScore -= 75000;
+                        } else if (c0 === EMPTY || c4 === EMPTY) {
+                            // Chuỗi 3 mở 1 đầu -> Đe dọa thắng ở nước tiếp theo
+                            if (c1 === AI) totalScore += 5500;
+                            else totalScore -= 6500;
+                        }
+                    }
+                }
+            }
+
+            // 4. Điểm kiểm soát vị trí trung tâm bàn cờ (Positional Control)
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                if (b[i] === AI) totalScore += POSITIONAL_WEIGHTS[i];
+                else if (b[i] === HUMAN) totalScore -= POSITIONAL_WEIGHTS[i];
+            }
+
+            return totalScore;
+        }
+
+        // Bảng điểm theo số quân đã chiếm trong một cửa sổ thắng K ô
+        function getSegmentWeight(count, k, isAI) {
+            // Tăng nhẹ hệ số phòng thủ (!isAI) để AI luôn chủ động chặn các mối đe dọa nguy hiểm của người chơi
+            const defenseMultiplier = isAI ? 1.0 : 1.15;
+            if (k === 4) {
+                if (count === 3) return Math.round(4200 * defenseMultiplier);
+                if (count === 2) return Math.round(260 * defenseMultiplier);
+                if (count === 1) return 18;
+            } else {
+                // k === 5
+                if (count === 4) return Math.round(8000 * defenseMultiplier);
+                if (count === 3) return Math.round(750 * defenseMultiplier);
+                if (count === 2) return Math.round(90 * defenseMultiplier);
+                if (count === 1) return 12;
+            }
+            return 0;
+        }
+
+        /***********************************************************************
+         * 5. SẮP XẾP THỨ TỰ NƯỚC ĐI (MOVE ORDERING) ĐỂ TỐI ƯU CẮT TỈA ALPHA-BETA
+         * Nếu xét các nước đi mạnh nhất trước (nước thắng ngay, nước chặn thắng,
+         * hoặc ô gần các quân đã đánh), Alpha-Beta sẽ cắt tỉa được tối đa!
+         ***********************************************************************/
+        function getOrderedMoves(b, currentTurnPlayer) {
+            const candidates = [];
+            const opponent = currentTurnPlayer === AI ? HUMAN : AI;
+
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                if (b[i] !== EMPTY) continue;
+
+                let priority = POSITIONAL_WEIGHTS[i] * 2;
+
+                // Kiểm tra nhanh nếu đánh vào ô i có tạo thắng ngay hoặc chặn đối thủ thắng ngay không
+                b[i] = currentTurnPlayer;
+                const winNow = checkImmediateWinAt(b, currentTurnPlayer);
+                b[i] = opponent;
+                const blockOpponentWin = checkImmediateWinAt(b, opponent);
+                b[i] = EMPTY;
+
+                if (winNow) {
+                    priority += 500000;
+                } else if (blockOpponentWin) {
+                    priority += 250000;
+                } else {
+                    // Cộng điểm nếu ô i nằm kề (trong bán kính 1 ô) với các quân cờ đã có trên bàn
+                    const r = Math.floor(i / BOARD_SIZE);
+                    const c = i % BOARD_SIZE;
+                    for (let dr = -1; dr <= 1; dr++) {
+                        for (let dc = -1; dc <= 1; dc++) {
+                            if (dr === 0 && dc === 0) continue;
+                            const nr = r + dr, nc = c + dc;
+                            if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) {
+                                const neighborVal = b[nr * BOARD_SIZE + nc];
+                                if (neighborVal !== EMPTY) {
+                                    priority += 45;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                candidates.push({ index: i, priority });
+            }
+
+            // Sắp xếp giảm dần theo điểm ưu tiên
+            candidates.sort((a, b) => b.priority - a.priority);
+            return candidates.map(c => c.index);
+        }
+
+        // Kiểm tra nhanh xem player có chuỗi thắng trên bàn cờ hay chưa
+        function checkImmediateWinAt(b, player) {
+            for (let i = 0; i < winSegments.length; i++) {
+                const seg = winSegments[i];
+                let match = true;
+                for (let j = 0; j < seg.length; j++) {
+                    if (b[seg[j]] !== player) {
+                        match = false;
+                        break;
+                    }
+                }
+                if (match) return true;
+            }
+            return false;
+        }
+
+        /***********************************************************************
+         * 6. THUẬT TOÁN MINIMAX KẾT HỢP CẮT TỈA ALPHA-BETA
+         ***********************************************************************/
+        function minimax(b, depth, alpha, beta, isMaximizing) {
+            nodesEvaluated++;
+
+            // Kiểm tra trạng thái kết thúc hoặc đạt độ sâu giới hạn
+            const winState = checkWinnerState(b);
+            if (winState !== null || depth === 0) {
+                return evaluateBoard(b, depth);
+            }
+
+            // Nếu bật Alpha-Beta thì dùng Move Ordering, nếu tắt thì duyệt tuần tự để người dùng thấy sự khác biệt
+            const moves = useAlphaBeta
+                ? getOrderedMoves(b, isMaximizing ? AI : HUMAN)
+                : getSequentialMoves(b);
+
+            if (isMaximizing) {
+                let maxEval = -Infinity;
+                for (let i = 0; i < moves.length; i++) {
+                    const move = moves[i];
+                    b[move] = AI;
+                    const evaluation = minimax(b, depth - 1, alpha, beta, false);
+                    b[move] = EMPTY;
+
+                    if (evaluation > maxEval) maxEval = evaluation;
+                    if (evaluation > alpha) alpha = evaluation;
+
+                    // Cắt tỉa nhánh Beta (Beta Cutoff)
+                    if (useAlphaBeta && beta <= alpha) {
+                        prunedBranches += (moves.length - 1 - i);
+                        break;
+                    }
+                }
+                return maxEval;
+            } else {
+                let minEval = Infinity;
+                for (let i = 0; i < moves.length; i++) {
+                    const move = moves[i];
+                    b[move] = HUMAN;
+                    const evaluation = minimax(b, depth - 1, alpha, beta, true);
+                    b[move] = EMPTY;
+
+                    if (evaluation < minEval) minEval = evaluation;
+                    if (evaluation < beta) beta = evaluation;
+
+                    // Cắt tỉa nhánh Alpha (Alpha Cutoff)
+                    if (useAlphaBeta && beta <= alpha) {
+                        prunedBranches += (moves.length - 1 - i);
+                        break;
+                    }
+                }
+                return minEval;
+            }
+        }
+
+        function getSequentialMoves(b) {
+            const list = [];
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                if (b[i] === EMPTY) list.push(i);
+            }
+            return list;
+        }
+
+        /**
+         * Hàm tìm nước đi tối ưu nhất tại gốc (Root Search) cho player (AI hoặc Gợi ý cho HUMAN)
+         */
+        function findBestMove(b, targetPlayer) {
+            nodesEvaluated = 0;
+            prunedBranches = 0;
+            const startTime = performance.now();
+
+            // Giới hạn độ sâu an toàn nếu người dùng tắt Alpha-Beta trên bàn cờ còn trống nhiều ô
+            let emptyCount = 0;
+            for (let i = 0; i < TOTAL_CELLS; i++) if (b[i] === EMPTY) emptyCount++;
+
+            let effectiveDepth = searchDepth;
+            if (!useAlphaBeta && emptyCount > 14 && effectiveDepth > 3) {
+                effectiveDepth = 3; // Bảo vệ trình duyệt không bị treo khi tắt Alpha-Beta
+            }
+
+            const isMaximizingRoot = (targetPlayer === AI);
+            const moves = useAlphaBeta
+                ? getOrderedMoves(b, targetPlayer)
+                : getSequentialMoves(b);
+
+            let bestMove = moves[0];
+            let bestScore = isMaximizingRoot ? -Infinity : Infinity;
+            let alpha = -Infinity;
+            let beta = Infinity;
+
+            const rootEvaluations = [];
+
+            for (let i = 0; i < moves.length; i++) {
+                const move = moves[i];
+                b[move] = targetPlayer;
+                const score = minimax(b, effectiveDepth - 1, alpha, beta, !isMaximizingRoot);
+                b[move] = EMPTY;
+
+                rootEvaluations.push({ index: move, score });
+
+                if (isMaximizingRoot) {
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                    if (score > alpha) alpha = score;
+                } else {
+                    if (score < bestScore) {
+                        bestScore = score;
+                        bestMove = move;
+                    }
+                    if (score < beta) beta = score;
+                }
+            }
+
+            const elapsedMs = performance.now() - startTime;
+
+            // Lưu lại bảng điểm của các ô trống để hiển thị Heatmap và bảng xếp hạng
+            lastCandidateScores.clear();
+            rootEvaluations.forEach(item => {
+                // Quy đổi để luôn hiển thị trực quan
+                lastCandidateScores.set(item.index, item.score);
+            });
+
+            // Sắp xếp danh sách ứng viên từ tốt nhất đến kém nhất
+            rootEvaluations.sort((a, b) => isMaximizingRoot ? (b.score - a.score) : (a.score - b.score));
+
+            return {
+                bestMove,
+                bestScore,
+                nodesEvaluated,
+                prunedBranches,
+                elapsedMs,
+                effectiveDepth,
+                emptyCount,
+                rootEvaluations
+            };
+        }
+
+        /***********************************************************************
+         * 7. GIAO DIỆN NGƯỜI DÙNG & TƯƠNG TÁC (UI RENDERING & INTERACTION)
+         ***********************************************************************/
+        function initBoardUI() {
+            const grid = document.getElementById('boardGrid');
+            grid.innerHTML = '';
+
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                const r = Math.floor(i / BOARD_SIZE);
+                const c = i % BOARD_SIZE;
+                const coordName = `${COL_NAMES[c]}${r}`;
+
+                const cell = document.createElement('button');
+                cell.type = 'button';
+                cell.id = `cell-${i}`;
+                cell.className = 'board-cell rounded-xl bg-slate-950/90 border-2 border-slate-800 flex flex-col items-center justify-center focus:outline-none';
+                cell.setAttribute('aria-label', `Ô ${coordName}`);
+                cell.onclick = () => onCellClick(i);
+
+                // Nhãn tọa độ nhỏ ở góc trên trái của từng ô
+                const coordTag = document.createElement('span');
+                coordTag.className = 'absolute top-1 left-1.5 text-[10px] font-mono text-slate-600 pointer-events-none';
+                coordTag.textContent = `${coordName}`;
+
+                // Vùng chứa ký hiệu X hoặc O
+                const pieceContainer = document.createElement('div');
+                pieceContainer.id = `piece-${i}`;
+                pieceContainer.className = 'flex items-center justify-center w-full h-full';
+
+                // Nhãn hiển thị điểm lượng giá AI ở góc dưới phải
+                const evalTag = document.createElement('span');
+                evalTag.id = `eval-${i}`;
+                evalTag.className = 'absolute bottom-1 right-1.5 text-[10px] font-mono font-semibold pointer-events-none hidden';
+
+                cell.appendChild(coordTag);
+                cell.appendChild(pieceContainer);
+                cell.appendChild(evalTag);
+                grid.appendChild(cell);
+            }
+        }
+
+        function renderBoard() {
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                const cell = document.getElementById(`cell-${i}`);
+                const pieceContainer = document.getElementById(`piece-${i}`);
+                const val = board[i];
+
+                // Reset classes
+                cell.classList.remove('occupied', 'game-over', 'cell-last-move', 'cell-winner', 'cell-hint');
+                if (gameOver) cell.classList.add('game-over');
+
+                if (val !== EMPTY) {
+                    cell.classList.add('occupied');
+                }
+
+                if (i === lastMoveIndex) {
+                    cell.classList.add('cell-last-move');
+                }
+
+                if (i === hintMoveIndex && val === EMPTY && !gameOver) {
+                    cell.classList.add('cell-hint');
+                }
+
+                if (winningCells.includes(i)) {
+                    cell.classList.add('cell-winner');
+                }
+
+                // Render X hoặc O SVG
+                const currentRendered = pieceContainer.getAttribute('data-piece');
+                if (currentRendered !== String(val)) {
+                    pieceContainer.setAttribute('data-piece', String(val));
+                    if (val === HUMAN) {
+                        pieceContainer.innerHTML = `
+                            <svg class="w-8 h-8 sm:w-10 sm:h-10 text-sky-400 piece-anim drop-shadow-[0_0_8px_rgba(56,189,248,0.45)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round">
+                                <line x1="5" y1="5" x2="19" y2="19"></line>
+                                <line x1="19" y1="5" x2="5" y2="19"></line>
+                            </svg>
+                        `;
+                    } else if (val === AI) {
+                        pieceContainer.innerHTML = `
+                            <svg class="w-8 h-8 sm:w-10 sm:h-10 text-rose-400 piece-anim drop-shadow-[0_0_8px_rgba(251,113,133,0.45)]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <circle cx="12" cy="12" r="7.5"></circle>
+                            </svg>
+                        `;
+                    } else {
+                        pieceContainer.innerHTML = '';
+                    }
+                }
+            }
+
+            renderHeatmapOverlay();
+            renderWinningLineSVG();
+            updateUndoButtonState();
+        }
+
+        function renderHeatmapOverlay() {
+            const showHeatmap = document.getElementById('toggleHeatmap').checked;
+
+            for (let i = 0; i < TOTAL_CELLS; i++) {
+                const evalTag = document.getElementById(`eval-${i}`);
+                if (!showHeatmap || board[i] !== EMPTY || gameOver || !lastCandidateScores.has(i)) {
+                    evalTag.classList.add('hidden');
+                    continue;
+                }
+
+                const score = lastCandidateScores.get(i);
+                evalTag.classList.remove('hidden');
+                evalTag.textContent = formatShortScore(score);
+
+                if (score >= 4000) {
+                    evalTag.className = 'absolute bottom-1 right-1.5 text-[10px] font-mono font-bold text-rose-400 pointer-events-none';
+                } else if (score <= -4000) {
+                    evalTag.className = 'absolute bottom-1 right-1.5 text-[10px] font-mono font-bold text-sky-400 pointer-events-none';
+                } else if (score > 0) {
+                    evalTag.className = 'absolute bottom-1 right-1.5 text-[10px] font-mono text-amber-300/90 pointer-events-none';
+                } else {
+                    evalTag.className = 'absolute bottom-1 right-1.5 text-[10px] font-mono text-slate-400 pointer-events-none';
+                }
+            }
+        }
+
+        function renderWinningLineSVG() {
+            const svg = document.getElementById('winLineSvg');
+            const lineEl = document.getElementById('winLineElement');
+
+            if (!winningCells || winningCells.length === 0) {
+                svg.classList.add('hidden');
+                return;
+            }
+
+            const firstIdx = winningCells[0];
+            const lastIdx = winningCells[winningCells.length - 1];
+
+            const r1 = Math.floor(firstIdx / BOARD_SIZE);
+            const c1 = firstIdx % BOARD_SIZE;
+            const r2 = Math.floor(lastIdx / BOARD_SIZE);
+            const c2 = lastIdx % BOARD_SIZE;
+
+            // Tọa độ tâm mỗi ô trong hệ 500x500 (mỗi ô 100x100, tâm tại +50)
+            const x1 = c1 * 100 + 50;
+            const y1 = r1 * 100 + 50;
+            const x2 = c2 * 100 + 50;
+            const y2 = r2 * 100 + 50;
+
+            lineEl.setAttribute('x1', x1);
+            lineEl.setAttribute('y1', y1);
+            lineEl.setAttribute('x2', x2);
+            lineEl.setAttribute('y2', y2);
+
+            svg.classList.remove('hidden');
+        }
+
+        /***********************************************************************
+         * 8. ĐIỀU KHIỂN LƯỢT CHƠI (GAMEPLAY FLOW)
+         ***********************************************************************/
+        function onCellClick(index) {
+            if (gameOver || currentPlayer !== HUMAN || board[index] !== EMPTY) return;
+
+            hintMoveIndex = -1;
+            makeMove(index, HUMAN, null);
+
+            if (!gameOver) {
+                currentPlayer = AI;
+                updateStatusBanner();
+
+                // Cho phép UI kịp vẽ nước đi của người chơi trước khi AI tính toán
+                setTimeout(() => {
+                    executeAIMove();
+                }, 60);
+            }
+        }
+
+        function executeAIMove() {
+            if (gameOver) return;
+
+            const result = findBestMove(board, AI);
+            makeMove(result.bestMove, AI, result);
+
+            updateTelemetryUI(result, 'AI (O)');
+            renderCandidateMovesList(result.rootEvaluations, result.bestMove);
+
+            if (!gameOver) {
+                currentPlayer = HUMAN;
+                updateStatusBanner();
+            }
+        }
+
+        function makeMove(index, player, aiStats) {
+            board[index] = player;
+            lastMoveIndex = index;
+
+            moveHistory.push({
+                moveNumber: moveHistory.length + 1,
+                index,
+                player,
+                stats: aiStats
+            });
+
+            // Kiểm tra kết thúc ván đấu
+            const winCheck = checkWinnerState(board);
+            if (winCheck !== null) {
+                gameOver = true;
+                winningCells = winCheck.line || [];
+
+                if (winCheck.winner === HUMAN) {
+                    scores.player++;
+                    document.getElementById('scorePlayer').textContent = scores.player;
+                } else if (winCheck.winner === AI) {
+                    scores.ai++;
+                    document.getElementById('scoreAI').textContent = scores.ai;
+                } else {
+                    scores.draw++;
+                    document.getElementById('scoreDraw').textContent = scores.draw;
+                }
+            }
+
+            renderBoard();
+            renderMoveHistoryList();
+            updateStatusBanner(winCheck);
+            updateBoardAdvantageBar();
+        }
+
+        function requestHint() {
+            if (gameOver || currentPlayer !== HUMAN) return;
+
+            const result = findBestMove(board, HUMAN);
+            hintMoveIndex = result.bestMove;
+
+            updateTelemetryUI(result, 'Gợi ý cho Bạn (X)');
+            renderCandidateMovesList(result.rootEvaluations, result.bestMove);
+            renderBoard();
+        }
+
+        function undoMove() {
+            if (moveHistory.length === 0 || currentPlayer !== HUMAN && !gameOver) return;
+
+            // Nếu chơi với AI, lùi lại 2 nước (1 nước của AI + 1 nước của Người chơi) để về lại lượt người chơi
+            let stepsToUndo = 1;
+            if (moveHistory.length >= 2 && moveHistory[moveHistory.length - 1].player === AI) {
+                stepsToUndo = 2;
+            }
+
+            for (let i = 0; i < stepsToUndo; i++) {
+                const popped = moveHistory.pop();
+                if (popped) {
+                    board[popped.index] = EMPTY;
+                }
+            }
+
+            gameOver = false;
+            winningCells = [];
+            hintMoveIndex = -1;
+            lastMoveIndex = moveHistory.length > 0 ? moveHistory[moveHistory.length - 1].index : -1;
+            currentPlayer = HUMAN;
+
+            renderBoard();
+            renderMoveHistoryList();
+            updateStatusBanner();
+            updateBoardAdvantageBar();
+        }
+
+        function resetGame() {
+            winLength = parseInt(document.getElementById('selectWinLength').value, 10);
+            searchDepth = parseInt(document.getElementById('selectDepth').value, 10);
+            useAlphaBeta = document.getElementById('selectPruningMode').value === 'ON';
+            const firstPlayerSetting = document.getElementById('selectFirstPlayer').value;
+
+            precomputeBoardLines(winLength);
+
+            board.fill(EMPTY);
+            moveHistory = [];
+            lastMoveIndex = -1;
+            hintMoveIndex = -1;
+            winningCells = [];
+            lastCandidateScores.clear();
+            gameOver = false;
+
+            currentPlayer = (firstPlayerSetting === 'AI') ? AI : HUMAN;
+
+            renderBoard();
+            renderMoveHistoryList();
+            updateStatusBanner();
+            updateBoardAdvantageBar();
+
+            document.getElementById('metricDepthInfo').textContent = `Độ sâu: ${searchDepth} | Thắng: ${winLength} ô`;
+
+            if (currentPlayer === AI) {
+                setTimeout(() => {
+                    executeAIMove();
+                }, 120);
+            }
+        }
+
+        function onSettingsChange(shouldResetGame) {
+            winLength = parseInt(document.getElementById('selectWinLength').value, 10);
+            searchDepth = parseInt(document.getElementById('selectDepth').value, 10);
+            useAlphaBeta = document.getElementById('selectPruningMode').value === 'ON';
+
+            document.getElementById('metricDepthInfo').textContent = `Độ sâu: ${searchDepth} | Thắng: ${winLength} ô`;
+
+            if (shouldResetGame) {
+                resetGame();
+            }
+        }
+
+        /***********************************************************************
+         * 9. CẬP NHẬT BẢNG THÔNG SỐ TELEMETRY & LỊCH SỬ (TELEMETRY & LOGS)
+         ***********************************************************************/
+        function updateStatusBanner(winCheck = null) {
+            const badge = document.getElementById('turnBadgeIcon');
+            const msg = document.getElementById('statusMessage');
+
+            if (gameOver && winCheck) {
+                if (winCheck.winner === HUMAN) {
+                    badge.className = 'w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500 flex items-center justify-center text-emerald-400 font-bold text-xl shrink-0';
+                    badge.innerHTML = '<i class="fa-solid fa-trophy"></i>';
+                    msg.innerHTML = `<span class="text-emerald-400">Chúc mừng! Bạn (X) đã chiến thắng (${winLength} ô liên tiếp)!</span>`;
+                } else if (winCheck.winner === AI) {
+                    badge.className = 'w-11 h-11 rounded-xl bg-rose-500/20 border border-rose-500 flex items-center justify-center text-rose-400 font-bold text-xl shrink-0';
+                    badge.innerHTML = '<i class="fa-solid fa-robot"></i>';
+                    msg.innerHTML = `<span class="text-rose-400">Máy AI (O) chiến thắng với ${winLength} ô liên tiếp!</span>`;
+                } else {
+                    badge.className = 'w-11 h-11 rounded-xl bg-amber-500/20 border border-amber-500 flex items-center justify-center text-amber-400 font-bold text-xl shrink-0';
+                    badge.innerHTML = '<i class="fa-solid fa-handshake"></i>';
+                    msg.innerHTML = `<span class="text-amber-400">Ván đấu Hòa! Cả hai bên phòng thủ rất kín kẽ.</span>`;
+                }
+                return;
+            }
+
+            if (currentPlayer === HUMAN) {
+                badge.className = 'w-11 h-11 rounded-xl bg-sky-500/15 border border-sky-500/40 flex items-center justify-center text-sky-400 font-bold text-xl shrink-0';
+                badge.textContent = 'X';
+                msg.innerHTML = `Đến lượt bạn đánh <span class="text-xs font-normal text-slate-400">(Cần ${winLength} ô liên tiếp)</span>`;
+            } else {
+                badge.className = 'w-11 h-11 rounded-xl bg-rose-500/15 border border-rose-500/40 flex items-center justify-center text-rose-400 font-bold text-xl shrink-0 animate-pulse';
+                badge.textContent = 'O';
+                msg.innerHTML = `<span class="text-rose-400">AI đang duyệt cây Minimax...</span>`;
+            }
+        }
+
+        function updateTelemetryUI(result, actorLabel) {
+            const coord = indexToCoordString(result.bestMove);
+
+            document.getElementById('telemetryTurnTag').textContent = `${actorLabel} → ${coord}`;
+            document.getElementById('metricNodes').textContent = result.nodesEvaluated.toLocaleString('vi-VN');
+            document.getElementById('metricDepthInfo').textContent = `Độ sâu: ${result.effectiveDepth} | Ô trống: ${result.emptyCount}`;
+
+            document.getElementById('metricPruned').textContent = result.prunedBranches.toLocaleString('vi-VN');
+
+            // Ước tính không gian nút lý thuyết nếu không cắt tỉa Alpha-Beta ở cùng độ sâu
+            let theoreticalNodes = 1;
+            let bFactor = result.emptyCount;
+            for (let d = 0; d < result.effectiveDepth; d++) {
+                theoreticalNodes *= Math.max(1, bFactor - d);
+            }
+            const savedPercent = useAlphaBeta && theoreticalNodes > result.nodesEvaluated
+                ? Math.min(99.9, ((1 - result.nodesEvaluated / theoreticalNodes) * 100)).toFixed(1)
+                : '0.0';
+
+            document.getElementById('metricPruneRate').textContent = useAlphaBeta
+                ? `Giảm ~${savedPercent}% cây duyệt`
+                : `Đã tắt cắt tỉa α-β`;
+
+            document.getElementById('metricTime').textContent = `${result.elapsedMs.toFixed(2)} ms`;
+            const nodesPerMs = result.elapsedMs > 0
+                ? Math.round(result.nodesEvaluated / result.elapsedMs).toLocaleString('vi-VN')
+                : result.nodesEvaluated;
+            document.getElementById('metricSpeed').textContent = `Tốc độ: ~${nodesPerMs} nút/ms`;
+
+            document.getElementById('metricScore').textContent = formatShortScore(result.bestScore);
+            document.getElementById('metricBestMove').textContent = `Nước chọn: ${coord}`;
+        }
+
+        function updateBoardAdvantageBar() {
+            const rawEval = evaluateBoard(board, 0);
+            // Quy đổi điểm lượng giá sang phần trăm thanh trạng thái (Sigmoid-like mapping)
+            const clamped = Math.max(-10000, Math.min(10000, rawEval));
+            const aiPercent = 50 + (clamped / 10000) * 45;
+            const playerPercent = 100 - aiPercent;
+
+            document.getElementById('evalBarPlayer').style.width = `${playerPercent}%`;
+            document.getElementById('evalBarAI').style.width = `${aiPercent}%`;
+
+            const labelEl = document.getElementById('evalBarLabel');
+            if (rawEval > 200) {
+                labelEl.textContent = `AI ưu thế (+${formatShortScore(rawEval)})`;
+                labelEl.className = 'font-mono text-rose-400 text-xs font-semibold';
+            } else if (rawEval < -200) {
+                labelEl.textContent = `Bạn ưu thế (${formatShortScore(rawEval)})`;
+                labelEl.className = 'font-mono text-sky-400 text-xs font-semibold';
+            } else {
+                labelEl.textContent = `Cân bằng (${rawEval})`;
+                labelEl.className = 'font-mono text-slate-300 text-xs';
+            }
+        }
+
+        function renderCandidateMovesList(evaluations, chosenMove) {
+            const container = document.getElementById('candidateMovesList');
+            if (!evaluations || evaluations.length === 0) {
+                container.innerHTML = `<div class="text-xs text-slate-500 text-center py-6">Không còn nước đi khả dụng.</div>`;
+                return;
+            }
+
+            // Hiển thị tối đa 10 phương án hàng đầu
+            const topList = evaluations.slice(0, 10);
+            const maxAbs = Math.max(100, ...topList.map(e => Math.abs(e.score)));
+
+            container.innerHTML = topList.map((item, idx) => {
+                const isBest = item.index === chosenMove;
+                const coord = indexToCoordString(item.index);
+                const barWidth = Math.max(12, Math.min(100, Math.round((Math.abs(item.score) / maxAbs) * 100)));
+                const scoreText = formatShortScore(item.score);
+
+                return `
+                    <div class="p-2.5 rounded-xl border ${isBest ? 'bg-sky-500/10 border-sky-500/40' : 'bg-slate-950/60 border-slate-800/80'} flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2.5 min-w-[115px]">
+                            <span class="w-5 h-5 rounded-md text-[11px] font-mono font-bold flex items-center justify-center ${isBest ? 'bg-sky-500 text-white' : 'bg-slate-800 text-slate-400'}">
+                                ${idx + 1}
+                            </span>
+                            <span class="font-mono text-xs font-bold ${isBest ? 'text-white' : 'text-slate-300'}">
+                                Ô ${coord}
+                            </span>
+                            ${isBest ? '<span class="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-semibold">Tối ưu</span>' : ''}
+                        </div>
+
+                        <div class="flex-1 bg-slate-800/70 h-2 rounded-full overflow-hidden">
+                            <div class="h-full ${item.score >= 0 ? 'bg-rose-500' : 'bg-sky-400'}" style="width: ${barWidth}%"></div>
+                        </div>
+
+                        <div class="font-mono text-xs font-bold min-w-[60px] text-right ${item.score >= 0 ? 'text-rose-400' : 'text-sky-400'}">
+                            ${scoreText}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderMoveHistoryList() {
+            const badge = document.getElementById('moveCountBadge');
+            const container = document.getElementById('moveHistoryList');
+            badge.textContent = moveHistory.length;
+
+            if (moveHistory.length === 0) {
+                container.innerHTML = `<div class="text-xs text-slate-500 text-center py-8 font-sans">Chưa có nước đi nào được thực hiện.</div>`;
+                return;
+            }
+
+            container.innerHTML = moveHistory.slice().reverse().map(item => {
+                const isAI = item.player === AI;
+                const coord = indexToCoordString(item.index);
+                const statsInfo = item.stats
+                    ? `${item.stats.nodesEvaluated.toLocaleString('vi-VN')} nút • ${item.stats.elapsedMs.toFixed(1)}ms`
+                    : 'Người chơi chọn';
+
+                return `
+                    <div class="px-3 py-2 rounded-lg bg-slate-950/70 border border-slate-800/80 flex items-center justify-between">
+                        <div class="flex items-center gap-2">
+                            <span class="text-slate-500">#${item.moveNumber}</span>
+                            <span class="px-1.5 py-0.5 rounded text-[11px] font-bold ${isAI ? 'bg-rose-500/20 text-rose-400' : 'bg-sky-500/20 text-sky-400'}">
+                                ${isAI ? 'AI (O)' : 'Bạn (X)'}
+                            </span>
+                            <span class="text-slate-200 font-semibold">${coord}</span>
+                        </div>
+                        <span class="text-[11px] text-slate-400">${statsInfo}</span>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function updateUndoButtonState() {
+            const btnUndo = document.getElementById('btnUndo');
+            btnUndo.disabled = moveHistory.length === 0;
+        }
+
+        /***********************************************************************
+         * 10. TIỆN ÍCH CHUYỂN TAB & ĐỊNH DẠNG (UTILITIES)
+         ***********************************************************************/
+        function switchTab(tabName) {
+            const tabs = ['candidates', 'history', 'code'];
+            tabs.forEach(t => {
+                const panel = document.getElementById(`tabPanel-${t}`);
+                const btn = document.getElementById(`tabBtn-${t}`);
+                if (t === tabName) {
+                    panel.classList.remove('hidden');
+                    btn.className = 'flex-1 py-3 px-3 text-xs font-bold border-b-2 border-sky-500 text-sky-400 bg-slate-900/60 transition';
+                } else {
+                    panel.classList.add('hidden');
+                    btn.className = 'flex-1 py-3 px-3 text-xs font-bold border-b-2 border-transparent text-slate-400 hover:text-slate-200 transition';
+                }
+            });
+        }
+
+        function indexToCoordString(index) {
+            const r = Math.floor(index / BOARD_SIZE);
+            const c = index % BOARD_SIZE;
+            return `${COL_NAMES[c]}${r} (${r},${c})`;
+        }
+
+        function formatShortScore(score) {
+            if (score >= 900000) return '+THẮNG';
+            if (score <= -900000) return '-THUA';
+            if (Math.abs(score) >= 10000) {
+                return (score > 0 ? '+' : '') + (score / 1000).toFixed(1) + 'k';
+            }
+            return (score > 0 ? '+' : '') + score;
+        }
+
+        function copyAlgorithmCode() {
+            const codeText = document.getElementById('codeBlockDisplay').innerText;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = codeText;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            const btn = document.getElementById('btnCopyCode');
+            const originalHTML = btn.innerHTML;
+            btn.innerHTML = `<i class="fa-solid fa-check text-emerald-400"></i> <span class="text-emerald-400">Đã chép!</span>`;
+            setTimeout(() => {
+                btn.innerHTML = originalHTML;
+            }, 1800);
+        }
+
+        // Khởi chạy ứng dụng khi trang tải xong
+        window.onload = function () {
+            initBoardUI();
+            resetGame();
+        };
+    </script>
+</body>
+</html>
