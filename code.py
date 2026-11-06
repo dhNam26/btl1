@@ -7,7 +7,7 @@ EMPTY = "."
 HUMAN = "X"  # Người chơi (Minimizing player)
 AI = "O"     # Máy (Maximizing player)
 
-# Bảng trọng số vị trí ưu tiên khu vực trung tâm bàn cờ 5x5
+# Bảng trọng số vị trí ưu tiên khu vực trung tâm bàn cờ 9x9
 CENTER_WEIGHTS = [
     [1, 2, 3, 2, 1],
     [2, 4, 6, 4, 2],
@@ -17,9 +17,11 @@ CENTER_WEIGHTS = [
 ]
 
 
-class TicTacToe5x5AI:
-    def __init__(self, board_size: int = 5, win_length: int = 4):
+class TicTacToe9x9AI:
+    def __init__(self, board_size: int = 9, win_length: int = 5):
+        self.deadline = math.inf
         self.size = board_size
+        self.center_weights = [[12-abs(r-board_size//2)-abs(c-board_size//2) for c in range(board_size)] for r in range(board_size)]
         self.win_length = win_length
         self.nodes_visited = 0
         self.pruned_branches = 0
@@ -53,7 +55,7 @@ class TicTacToe5x5AI:
 
     def evaluate_board(self, board: List[List[str]], depth: int = 0) -> int:
         """
-        Hàm lượng giá Heuristic cho bàn cờ 5x5:
+        Hàm lượng giá Heuristic cho bàn cờ 9x9:
         1. Điểm thắng/thua tuyệt đối (cộng/trừ depth để ưu tiên thắng sớm, thua muộn).
         2. Đánh giá từng cửa sổ chiến thắng (Win Windows).
         3. Phát hiện chuỗi mở 2 đầu nguy hiểm (_ X X X _ hoặc _ O O O _).
@@ -107,9 +109,9 @@ class TicTacToe5x5AI:
         for r in range(self.size):
             for c in range(self.size):
                 if board[r][c] == AI:
-                    score += CENTER_WEIGHTS[r][c]
+                    score += self.center_weights[r][c]
                 elif board[r][c] == HUMAN:
-                    score -= CENTER_WEIGHTS[r][c]
+                    score -= self.center_weights[r][c]
 
         return score
 
@@ -130,13 +132,16 @@ class TicTacToe5x5AI:
         """
         opponent = HUMAN if current_player == AI else AI
         move_Candidates = []
+        occupied = [(r,c) for r in range(self.size) for c in range(self.size) if board[r][c] != EMPTY]
 
         for r in range(self.size):
             for c in range(self.size):
                 if board[r][c] != EMPTY:
                     continue
 
-                priority = CENTER_WEIGHTS[r][c]
+                if occupied and not any(max(abs(r-rr),abs(c-cc)) <= 2 for rr,cc in occupied):
+                    continue
+                priority = self.center_weights[r][c]
 
                 # Kiểm tra thắng ngay hoặc chặn thắng ngay
                 if self._creates_immediate_win(board, r, c, current_player):
@@ -159,7 +164,9 @@ class TicTacToe5x5AI:
 
         # Sắp xếp giảm dần theo điểm ưu tiên
         move_Candidates.sort(key=lambda x: x[0], reverse=True)
-        return [(r, c) for _, r, c in move_Candidates]
+        wins = [m for m in move_Candidates if m[0] >= 100000]
+        blocks = [m for m in move_Candidates if 50000 <= m[0] < 100000]
+        return [(r,c) for _,r,c in (wins or blocks or move_Candidates[:12])]
 
     def minimax(
         self,
@@ -172,6 +179,8 @@ class TicTacToe5x5AI:
     ) -> int:
         """Thuật toán Minimax kết hợp Cắt tỉa Alpha-Beta."""
         self.nodes_visited += 1
+        if time.perf_counter() > self.deadline:
+            return self.evaluate_board(board, 0)
 
         # Điều kiện dừng: có người thắng/hòa hoặc chạm độ sâu giới hạn
         winner = self.check_winner(board)
@@ -220,6 +229,7 @@ class TicTacToe5x5AI:
         self.nodes_visited = 0
         self.pruned_branches = 0
         start_time = time.perf_counter()
+        self.deadline = start_time + 1.0
 
         best_move = None
         best_score = -math.inf
@@ -265,11 +275,11 @@ def print_board(board: List[List[str]]):
 
 
 if __name__ == "__main__":
-    # Khởi tạo AI cho bàn cờ 5x5, điều kiện 4 ô liên tiếp thắng
-    ai_engine = TicTacToe5x5AI(board_size=5, win_length=4)
-    board = [[EMPTY for _ in range(5)] for _ in range(5)]
+    # Khởi tạo AI cho bàn cờ 9x9, điều kiện 4 ô liên tiếp thắng
+    ai_engine = TicTacToe9x9AI(board_size=9, win_length=5)
+    board = [[EMPTY for _ in range(9)] for _ in range(9)]
 
-    print("=== TIC-TAC-TOE 5x5 (MINIMAX + ALPHA-BETA PRUNING) ===")
+    print("=== TIC-TAC-TOE 9x9 (MINIMAX + ALPHA-BETA PRUNING) ===")
     print("Bạn là 'X', AI là 'O'. Nhập tọa độ dạng: hàng cột (VD: 2 2)")
 
     while True:
@@ -286,7 +296,7 @@ if __name__ == "__main__":
                 print("Vui lòng nhập đúng 2 số: hàng và cột (từ 0 đến 4).")
                 continue
             r, c = map(int, user_input)
-            if not (0 <= r < 5 and 0 <= c < 5) or board[r][c] != EMPTY:
+            if not (0 <= r < 9 and 0 <= c < 9) or board[r][c] != EMPTY:
                 print("Ô không hợp lệ hoặc đã có quân cờ!")
                 continue
         except ValueError:
