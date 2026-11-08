@@ -1,25 +1,7 @@
 ### This repository made by Gemini 4 Argon with GPT-6.1 Sol
 
 
-# Caro Lab 9×9 — AI nâng cấp
-
-## Chạy website
-
-Mở thư mục trong VS Code, chạy `dist/index.html` bằng Live Server. Hoặc chạy:
-
-```bash
-python -m http.server 8000 --directory dist
-```
-
-Sau đó mở http://localhost:8000. Cần HTTP để Web Worker tải được engine.
-
-## File chính
-
-- `dist/engine.js`: thuật toán AI đang dùng trên website; có thể `require()` bằng Node.js.
-- `dist/ai-worker.js`: chạy AI ở luồng nền.
-- `dist/index.html`: giao diện, luật 5 quân liên tiếp, gợi ý, lịch sử, đi lại.
-- `check-ai.cjs`: kiểm tra chiến thuật, luật, khôi phục trạng thái, Alpha-Beta và hết giờ.
-- `code.py`: bản Python tham khảo từ source ban đầu, không phải engine nâng cấp đang chạy trên web.
+# Caro Lab 9×9 — AI nâng cấp - Upgrade by GPT
 
 ## Sức chơi
 
