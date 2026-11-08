@@ -1,3 +1,6 @@
+### This repository made by Gemini 4 Argon with GPT-6.1 Sol
+
+
 # Caro Lab 9×9 — AI nâng cấp
 
 ## Chạy website
